@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dynamic Bootstrap Tabs & Pills</title>
+
+    <!-- Bootstrap CSS (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        /* Small niceties */
+        body {
+            padding: 2rem;
+            background: #f8f9fa;
+        }
+
+        .nav-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            white-space: nowrap;
+        }
+
+        .nav-scroll .nav-link {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 0.25rem;
+        }
+
+        .tab-close {
+            font-size: 0.85rem;
+            margin-left: .4rem;
+            line-height: 1;
+            padding: .15rem .32rem;
+            border-radius: .25rem;
+        }
+
+        .tab-close:focus {
+            outline: 2px solid rgba(13, 110, 253, .25);
+        }
+
+        /* ensure tabcontent area height doesn't jump too much */
+        .tab-pane {
+            min-height: 8rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <h1 class="h4 mb-0">Dynamic Tabs & Pills (Bootstrap)</h1>
+
+            <div class="btn-group" role="group" aria-label="tab style">
+                <button id="styleTabs" type="button" class="btn btn-outline-primary active">Tabs</button>
+                <button id="stylePills" type="button" class="btn btn-outline-primary">Pills</button>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <!-- Tab controls (add new tab) -->
+                <form id="newTabForm" class="row g-2 align-items-center mb-3" onsubmit="return false;">
+                    <div class="col-sm-4">
+                        <input id="newTabTitle" class="form-control" placeholder="New tab title (e.g., Notes)"
+                            aria-label="New tab title">
+                    </div>
+                    <div class="col-sm-6">
+                        <input id="newTabContent" class="form-control" placeholder="New tab content (brief)"
+                            aria-label="New tab content">
+                    </div>
+                    <div class="col-auto">
+                        <button id="addTabBtn" class="btn btn-primary" type="button">Add Tab</button>
+                    </div>
+                </form>
+
+                <!-- Tab style and orientation toggles -->
+                <div class="d-flex gap-2 align-items-center mb-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="verticalCheck">
+                        <label class="form-check-label" for="verticalCheck">Vertical</label>
+                    </div>
+
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="borderedCheck">
+                        <label class="form-check-label" for="borderedCheck">Card bordered</label>
+                    </div>
+
+                    <small class="text-muted ms-auto">Tabs stored in your browser (localStorage).</small>
+                </div>
+
+                <div class="row">
+                    <!-- Tabs column (will adjust to vertical/horizontal) -->
+                    <div id="tabsColumn" class="col-12">
+                        <nav>
+                            <ul id="navTabs" class="nav nav-tabs nav-scroll" role="tablist" aria-label="Dynamic tabs">
+                                <!-- dynamic tab items go here -->
+                            </ul>
+                        </nav>
+
+                        <div id="tabContent" class="tab-content mt-3">
+                            <!-- dynamic tab panes go here -->
+                        </div>
+                    </div>
+                </div>
+            </div> <!-- card-body -->
+        </div> <!-- card -->
+    </div> <!-- container -->
+
+    <!-- Bootstrap JS (CDN) + Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        (function () {
+            // DOM refs
+            const navTabs = document.getElementById('navTabs');
+            const tabContent = document.getElementById('tabContent');
+            const addTabBtn = document.getElementById('addTabBtn');
+            const newTabTitle = document.getElementById('newTabTitle');
+            const newTabContent = document.getElementById('newTabContent');
+            const styleTabs = document.getElementById('styleTabs');
+            const stylePills = document.getElementById('stylePills');
+            const verticalCheck = document.getElementById('verticalCheck');
+            const borderedCheck = document.getElementById('borderedCheck');
+            const tabsColumn = document.getElementById('tabsColumn');
+
+            // localStorage keys
+            const STORAGE_KEY = 'dynamic_bootstrap_tabs_v1';
+            const STORAGE_ACTIVE = 'dynamic_bootstrap_tabs_active_v1';
+
+            // default starter tabs
+            const defaultTabs = [
+                { id: 'tab-home', title: 'Home', content: '<p>Welcome to the dynamic tabs demo. Add, remove, or switch style to pills.</p>' },
+                { id: 'tab-profile', title: 'Profile', content: '<p>This is your profile content. You can store anything here.</p>' },
+                { id: 'tab-settings', title: 'Settings', content: '<p>Settings content — tweak stuff here.</p>' }
+            ];
+
+            // Utility: create unique safe id
+            function makeId(base = 'tab') {
+                return base + '-' + Math.random().toString(36).slice(2, 9);
+            }
+
+            // Save and load
+            function saveTabs(tabs) {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tabs));
+            }
+            function loadTabs() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) return null;
+                    return JSON.parse(raw);
+                } catch (e) {
+                    console.warn('Failed to parse tabs from storage', e);
+                    return null;
+                }
+            }
+            function saveActive(id) {
+                localStorage.setItem(STORAGE_ACTIVE, id);
+            }
+            function loadActive() {
+                return localStorage.getItem(STORAGE_ACTIVE);
+            }
+
+            // Render functions
+            function clearNav() {
+                navTabs.innerHTML = '';
+                tabContent.innerHTML = '';
+            }
+
+            function renderTabs(tabs, activeId) {
+                clearNav();
+                if (!tabs || tabs.length === 0) return;
+
+                tabs.forEach((t, idx) => {
+                    const isActive = (t.id === activeId) || (!activeId && idx === 0);
+
+                    // create tab nav item
+                    const li = document.createElement('li');
+                    li.className = 'nav-item';
+                    li.setAttribute('role', 'presentation');
+
+                    const a = document.createElement('button');
+                    a.className = 'nav-link' + (isActive ? ' active' : '');
+                    a.id = t.id + '-tab';
+                    a.type = 'button';
+                    a.setAttribute('data-bs-toggle', 'tab');
+                    a.setAttribute('data-bs-target', '#' + t.id);
+                    a.setAttribute('role', 'tab');
+                    a.setAttribute('aria-controls', t.id);
+                    a.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    a.innerHTML = `<span class="tab-title">${escapeHtml(t.title)}</span>`;
+
+                    // close button
+                    const closeBtn = document.createElement('button');
+                    closeBtn.type = 'button';
+                    closeBtn.className = 'btn btn-sm btn-outline-secondary tab-close';
+                    closeBtn.setAttribute('aria-label', 'Close ' + t.title);
+                    closeBtn.innerHTML = '&times;';
+
+                    // when close clicked, remove tab
+                    closeBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        removeTab(t.id);
+                    });
+
+                    // add click handler to focus tab
+                    a.addEventListener('click', (ev) => {
+                        // Mark aria-selected consistent
+                        document.querySelectorAll('#navTabs .nav-link').forEach(n => n.setAttribute('aria-selected', 'false'));
+                        a.setAttribute('aria-selected', 'true');
+                        saveActive(t.id);
+                    });
+
+                    li.appendChild(a);
+                    li.appendChild(closeBtn);
+                    navTabs.appendChild(li);
+
+                    // create tab pane
+                    const pane = document.createElement('div');
+                    pane.className = 'tab-pane fade' + (isActive ? ' show active' : '');
+                    pane.id = t.id;
+                    pane.setAttribute('role', 'tabpanel');
+                    pane.setAttribute('aria-labelledby', t.id + '-tab');
+                    pane.innerHTML = `<div class="p-2">${t.content}</div>`;
+
+                    tabContent.appendChild(pane);
+                });
+
+                // Initialize Bootstrap tab behavior on all nav links
+                const tabTriggers = Array.from(navTabs.querySelectorAll('[data-bs-toggle="tab"]'));
+                tabTriggers.forEach(triggerEl => {
+                    // create a bootstrap Tab object (no direct variable needed)
+                    const tab = new bootstrap.Tab(triggerEl);
+                    // ensure keyboard activation still works — bootstrap handles it
+                });
+
+                // scroll active tab into view
+                const activeEl = navTabs.querySelector('.nav-link.active');
+                if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+                    activeEl.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+                }
+            }
+
+            // Escape HTML for safe insertion of user-provided strings
+            function escapeHtml(str) {
+                if (!str) return '';
+                return String(str)
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('"', '&quot;')
+                    .replaceAll("'", '&#39;');
+            }
+
+            // Add a new tab
+            function addTab(title, content, activate = true) {
+                const tabs = loadTabs() || defaultTabs.slice();
+                const id = makeId('tab');
+                const safeTitle = title && title.trim() ? title.trim() : 'Tab ' + (tabs.length + 1);
+                const safeContent = content && content.trim() ? escapeHtml(content.trim()) : '<em>(empty)</em>';
+
+                tabs.push({ id, title: safeTitle, content: safeContent });
+                saveTabs(tabs);
+                renderTabs(tabs, activate ? id : loadActive());
+                if (activate) {
+                    // programmatically activate
+                    const trigger = navTabs.querySelector(`#${id}-tab`);
+                    if (trigger) {
+                        new bootstrap.Tab(trigger).show();
+                    }
+                    saveActive(id);
+                }
+            }
+
+            // Remove a tab by id
+            function removeTab(id) {
+                let tabs = loadTabs() || defaultTabs.slice();
+                // if id not found, do nothing
+                const idx = tabs.findIndex(t => t.id === id);
+                if (idx === -1) return;
+
+                // determine next active tab: prefer previous sibling, else next, else none
+                const currentActive = loadActive();
+                tabs.splice(idx, 1);
+
+                saveTabs(tabs);
+
+                let nextActive = null;
+                if (currentActive === id) {
+                    // choose previous if exists
+                    if (idx - 1 >= 0) nextActive = tabs[idx - 1].id;
+                    else if (idx < tabs.length) nextActive = tabs[idx].id;
+                } else {
+                    nextActive = currentActive && tabs.some(t => t.id === currentActive) ? currentActive : (tabs[0] && tabs[0].id);
+                }
+
+                renderTabs(tabs, nextActive);
+                if (nextActive) {
+                    const trigger = navTabs.querySelector(`#${nextActive}-tab`);
+                    if (trigger) new bootstrap.Tab(trigger).show();
+                    saveActive(nextActive);
+                } else {
+                    // no tabs left
+                    localStorage.removeItem(STORAGE_ACTIVE);
+                }
+            }
+
+            // Initialize UI actions
+            function initEvents() {
+                addTabBtn.addEventListener('click', () => {
+                    addTab(newTabTitle.value, newTabContent.value, true);
+                    newTabTitle.value = '';
+                    newTabContent.value = '';
+                    newTabTitle.focus();
+                });
+
+                // allow Enter in title input to add
+                newTabTitle.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addTabBtn.click(); }
+                });
+                newTabContent.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); addTabBtn.click(); }
+                });
+
+                // style toggles
+                styleTabs.addEventListener('click', () => {
+                    styleTabs.classList.add('active');
+                    stylePills.classList.remove('active');
+                    navTabs.classList.remove('nav-pills');
+                    navTabs.classList.add('nav-tabs');
+                });
+                stylePills.addEventListener('click', () => {
+                    stylePills.classList.add('active');
+                    styleTabs.classList.remove('active');
+                    navTabs.classList.remove('nav-tabs');
+                    navTabs.classList.add('nav-pills');
+                });
+
+                verticalCheck.addEventListener('change', () => {
+                    if (verticalCheck.checked) {
+                        tabsColumn.classList.remove('col-12');
+                        tabsColumn.classList.add('d-flex', 'gap-3');
+                        navTabs.classList.add('flex-column', 'col-auto', 'me-3');
+                        tabContent.classList.add('flex-fill');
+                    } else {
+                        tabsColumn.classList.remove('d-flex', 'gap-3');
+                        navTabs.classList.remove('flex-column', 'col-auto', 'me-3');
+                        tabContent.classList.remove('flex-fill');
+                    }
+                });
+
+                borderedCheck.addEventListener('change', () => {
+                    const card = document.querySelector('.card');
+                    if (borderedCheck.checked) {
+                        card.classList.add('border');
+                    } else {
+                        card.classList.remove('border');
+                    }
+                });
+
+                // When a tab is activated, save active id
+                navTabs.addEventListener('click', (ev) => {
+                    const target = ev.target.closest('.nav-link');
+                    if (!target) return;
+                    // data-bs-target = #id
+                    const targetSelector = target.getAttribute('data-bs-target');
+                    if (targetSelector && targetSelector.startsWith('#')) {
+                        const id = targetSelector.slice(1);
+                        saveActive(id);
+                    }
+                });
+
+                // Keyboard: Delete key removes focused tab close button
+                navTabs.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+                        const focused = document.activeElement;
+                        if (focused && focused.classList.contains('nav-link')) {
+                            const id = focused.getAttribute('data-bs-target')?.slice(1);
+                            if (id) removeTab(id);
+                        }
+                    }
+                });
+            }
+
+            // On startup, load tabs from storage (fallback to defaults)
+            function startup() {
+                const saved = loadTabs();
+                const initial = saved && saved.length ? saved : defaultTabs.slice();
+                const active = loadActive() || (initial[0] && initial[0].id);
+                renderTabs(initial, active);
+                initEvents();
+            }
+
+            // Kick off
+            startup();
+
+            // expose a couple helpers for dev console (optional)
+            window._dynamicTabs = {
+                add: addTab,
+                remove: removeTab,
+                getAll: () => loadTabs() || []
+            };
+
+        })();
+    </script>
+</body>
+
+</html>
